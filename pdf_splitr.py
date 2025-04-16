@@ -5,17 +5,18 @@ Useful for old scans of books where each page contains two actual pages.
 """
 
 import os
+import sys
 from pathlib import Path
-import typer
-from rich import print
 from typing import Optional
-from PyPDF2 import PdfReader, PdfWriter
+
+import PyPDF2
+import typer
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from PyPDF2.generic import ArrayObject, FloatObject, NameObject
 
-app = typer.Typer(
-    help="Split PDF pages into left and right halves while preserving annotations.",
-    add_completion=False
-)
+app = typer.Typer(help="Split PDF pages into left and right halves while preserving annotations.")
+console = Console()
 
 class PDFProcessor:
     """Handles the processing of PDF files, splitting each page into left and right halves."""
@@ -71,21 +72,23 @@ class PDFProcessor:
            - Preserves and adjusts annotations for each half
         3. Saves the processed PDF with twice as many pages
         """
-        reader = PdfReader(self.input_path)
-        writer = PdfWriter()
+        reader = PyPDF2.PdfReader(self.input_path)
+        writer = PyPDF2.PdfWriter()
         total_pages = len(reader.pages)
 
-        with typer.progressbar(
-            reader.pages,
-            length=total_pages,
-            label="Processing pages",
-            show_pos=True
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn()
         ) as progress:
-            for page_num, page in enumerate(progress, 1):
+            task = progress.add_task("Processing pages", total=total_pages)
+            for page_num, page in enumerate(reader.pages, 1):
                 width, height, x_offset, y_offset = self.get_page_dimensions(page)
                 
                 # Create left half
-                left_page = PdfWriter()
+                left_page = PyPDF2.PdfWriter()
                 left_page.add_page(page)
                 left_page.pages[0].mediabox.lower_left = (x_offset, y_offset)
                 left_page.pages[0].mediabox.upper_right = (x_offset + width/2, y_offset + height)
@@ -110,10 +113,7 @@ class PDFProcessor:
                                         new_annots.append(annot)
                             except Exception as e:
                                 if not quiet:
-                                    typer.secho(
-                                        f"Warning: Could not process annotation on page {page_num}: {e}",
-                                        fg=typer.colors.YELLOW
-                                    )
+                                    console.print(f"[yellow]Warning: Could not process annotation on page {page_num}: {e}[/yellow]")
                                 continue
                         
                         # Update or remove annotations list
@@ -125,7 +125,7 @@ class PDFProcessor:
                 writer.add_page(left_page.pages[0])
 
                 # Create right half
-                right_page = PdfWriter()
+                right_page = PyPDF2.PdfWriter()
                 right_page.add_page(page)
                 right_page.pages[0].mediabox.lower_left = (x_offset + width/2, y_offset)
                 right_page.pages[0].mediabox.upper_right = (x_offset + width, y_offset + height)
@@ -150,10 +150,7 @@ class PDFProcessor:
                                         new_annots.append(annot)
                             except Exception as e:
                                 if not quiet:
-                                    typer.secho(
-                                        f"Warning: Could not process annotation on page {page_num}: {e}",
-                                        fg=typer.colors.YELLOW
-                                    )
+                                    console.print(f"[yellow]Warning: Could not process annotation on page {page_num}: {e}[/yellow]")
                                 continue
                         
                         # Update or remove annotations list
@@ -168,39 +165,39 @@ class PDFProcessor:
         with open(self.output_path, "wb") as output_file:
             writer.write(output_file)
 
-@app.command()
-def split_pdf(
-    input_pdf: Path = typer.Argument(
-        ...,
-        help="Path to the input PDF file",
-        exists=True,
-        dir_okay=False,
-        resolve_path=True
-    ),
-    output_pdf: Path = typer.Argument(
-        ...,
-        help="Path where the processed PDF will be saved",
-        dir_okay=False,
-        resolve_path=True
-    ),
-    quiet: bool = typer.Option(
-        False,
-        "--quiet", "-q",
-        help="Suppress progress messages"
-    )
-):
-    """Split each page of a PDF into left and right halves, preserving annotations."""
+def process_pdf(input_path: str, output_path: str) -> None:
+    """Process a single PDF file."""
     try:
-        processor = PDFProcessor(input_pdf, output_pdf)
-        processor.process_pdf(quiet=quiet)
-        if not quiet:
-            typer.secho(
-                f"\nSuccessfully created: {output_pdf}",
-                fg=typer.colors.GREEN
-            )
+        processor = PDFProcessor(input_path, output_path)
+        processor.process_pdf()
+        console.print(f"[green]Successfully processed {input_path} -> {output_path}[/green]")
     except Exception as e:
-        typer.secho(f"Error: {str(e)}", fg=typer.colors.RED, err=True)
+        console.print(f"[red]Error processing {input_path}: {str(e)}[/red]")
         raise typer.Exit(1)
+
+@app.command()
+def main(
+    input_pdf: str = typer.Argument(..., help="Input PDF file path"),
+    output_pdf: str = typer.Argument(..., help="Output PDF file path"),
+) -> None:
+    """
+    Split PDF pages into left and right halves while preserving annotations.
+    
+    This is useful for scanned books where each page contains two real pages.
+    The script will create a new PDF with twice as many pages, splitting each
+    original page into left and right halves.
+    """
+    # Validate input path
+    if not os.path.exists(input_pdf):
+        console.print(f"[red]Error: Input file {input_pdf} does not exist[/red]")
+        raise typer.Exit(1)
+    
+    # Create output directory if it doesn't exist
+    output_dir = os.path.dirname(output_pdf)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    process_pdf(input_pdf, output_pdf)
 
 if __name__ == "__main__":
     app() 

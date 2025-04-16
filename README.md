@@ -59,9 +59,6 @@ Options:
 python pdf_splitr.py --help
 ```
 
-Available options:
-- `--quiet` or `-q`: Suppress progress messages
-
 ### macOS Automator Integration
 
 The repository includes:
@@ -110,5 +107,7 @@ Written with Cursor.Ai, using Claude.
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Citation
+
+
 Daniel Tubb. 2025. "PDF Splitter Tool". Available at: https://github.com/your-repo/pdf_splitr
 
