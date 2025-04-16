@@ -101,7 +101,7 @@ The script:
 
 Feel free to open issues or submit pull requests with improvements.
 
-# Acknoledgments
+## Acknowledgments
 
 Written with Cursor.Ai, using Claude.
 
